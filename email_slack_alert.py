@@ -153,7 +153,7 @@ def check_unanswered_emails():
                 print(f"Found active project email! ID: {matched_project} | Subject: '{subject[:40]}...' | Waiting: {int(minutes_unanswered)} mins")
 
                 # Alerts if waiting more than 30 minutes (covers from 30 mins up to 24 hours ago)
-                if 30 <= minutes_unanswered <= 1440:
+                if minutes_unanswered >= 0:
                     send_slack_block_message(
                         slack_client, 
                         slack_channel, 
