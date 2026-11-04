@@ -7,23 +7,23 @@ from googleapiclient.discovery import build
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'][cite: 18]
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 def get_gmail_service():
-    token_json = os.environ.get("GMAIL_TOKEN_JSON")[cite: 18]
+    token_json = os.environ.get("GMAIL_TOKEN_JSON")
     if not token_json:
-        raise ValueError("GMAIL_TOKEN_JSON environment variable is missing.")[cite: 18]
+        raise ValueError("GMAIL_TOKEN_JSON environment variable is missing.")
     
-    creds_data = json.loads(token_json)[cite: 18]
-    creds = Credentials.from_authorized_user_info(creds_data, SCOPES)[cite: 18]
+    creds_data = json.loads(token_json)
+    creds = Credentials.from_authorized_user_info(creds_data, SCOPES)
     
-    if creds and creds.expired and creds.refresh_token:[cite: 18]
-        creds.refresh(Request())[cite: 18]
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
         
-    return build('gmail', 'v1', credentials=creds)[cite: 18]
+    return build('gmail', 'v1', credentials=creds)
 
 def send_slack_block_message(client, channel, sender, subject, snippet, mins, thread_id):
-    gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{thread_id}"[cite: 19]
+    gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{thread_id}"
     
     blocks = [
         {
@@ -61,70 +61,70 @@ def send_slack_block_message(client, channel, sender, subject, snippet, mins, th
         print(f"Error pushing to Slack: {e.response['error']}")
 
 def check_unanswered_emails():
-    slack_token = os.environ.get("SLACK_BOT_TOKEN")[cite: 18]
-    slack_channel = os.environ.get("SLACK_CHANNEL", "#general")[cite: 18]
+    slack_token = os.environ.get("SLACK_BOT_TOKEN")
+    slack_channel = os.environ.get("SLACK_CHANNEL", "#general")
     
     if not slack_token:
-        raise ValueError("SLACK_BOT_TOKEN environment variable is missing.")[cite: 18]
+        raise ValueError("SLACK_BOT_TOKEN environment variable is missing.")
 
-    gmail_service = get_gmail_service()[cite: 18]
-    slack_client = WebClient(token=slack_token)[cite: 18]
+    gmail_service = get_gmail_service()
+    slack_client = WebClient(token=slack_token)
     
-    # 1. Fetch your exact authenticated email address
+    # Get your own email address
     user_profile = gmail_service.users().getProfile(userId='me').execute()
     my_email = user_profile.get('emailAddress', '').lower()
     
-    # 2. Query recent active emails
+    # Query emails from the last 2 days
     query = "to:me newer_than:2d"
-    results = gmail_service.users().messages().list(userId='me', q=query).execute()[cite: 18]
-    messages = results.get('messages', [])[cite: 18]
+    results = gmail_service.users().messages().list(userId='me', q=query).execute()
+    messages = results.get('messages', [])
     
-    now = datetime.datetime.now(datetime.timezone.utc)[cite: 18]
+    now = datetime.datetime.now(datetime.timezone.utc)
     processed_threads = set()
 
     for msg in messages:
-        thread_id = msg['threadId'][cite: 18]
+        thread_id = msg['threadId']
         if thread_id in processed_threads:
             continue
         processed_threads.add(thread_id)
 
-        thread_data = gmail_service.users().threads().get(userId='me', id=thread_id).execute()[cite: 18]
-        thread_messages = thread_data.get('messages', [])[cite: 18]
+        thread_data = gmail_service.users().threads().get(userId='me', id=thread_id).execute()
+        thread_messages = thread_data.get('messages', [])
         if not thread_messages:
             continue
 
-        # 3. Identify the most recent message in this thread
+        # Look at the most recent message in the thread
         latest_msg = thread_messages[-1]
         latest_payload = latest_msg.get('payload', {})
         latest_headers = latest_payload.get('headers', [])
 
-        sender = next((h['value'] for h in latest_headers if h['name'].lower() == 'from'), 'Unknown Sender')[cite: 18]
+        sender = next((h['value'] for h in latest_headers if h['name'].lower() == 'from'), 'Unknown Sender')
         to_header = next((h['value'] for h in latest_headers if h['name'].lower() == 'to'), '')
-        subject = next((h['value'] for h in latest_headers if h['name'].lower() == 'subject'), 'No Subject')[cite: 18]
-        date_str = next((h['value'] for h in latest_headers if h['name'].lower() == 'date'), None)[cite: 18]
-        snippet = latest_msg.get('snippet', '')[cite: 18]
+        subject = next((h['value'] for h in latest_headers if h['name'].lower() == 'subject'), 'No Subject')
+        date_str = next((h['value'] for h in latest_headers if h['name'].lower() == 'date'), None)
+        snippet = latest_msg.get('snippet', '')
 
-        # Condition A: Skip if YOU sent the last message (means you already replied)
+        # 1. Skip if you sent the latest message (already replied)
         if my_email and my_email in sender.lower():
             continue
 
-        # Condition B: Skip if the email wasn't addressed directly to you in 'To:'
+        # 2. Skip if your email is not in the 'To:' field (ignores CC/BCC/group distributions)
         if my_email and my_email not in to_header.lower():
             continue
 
-        # Condition C: Calculate unanswered wait time
+        # 3. Check overdue response time
         if date_str:
             try:
-                clean_date = date_str.split(' (')[0].strip()[cite: 19]
+                clean_date = date_str.split(' (')[0].strip()
                 try:
-                    email_time = datetime.datetime.strptime(clean_date, '%a, %d %b %Y %H:%M:%S %z')[cite: 19]
+                    email_time = datetime.datetime.strptime(clean_date, '%a, %d %b %Y %H:%M:%S %z')
                 except ValueError:
-                    email_time = datetime.datetime.strptime(clean_date, '%d %b %Y %H:%M:%S %z')[cite: 19]
+                    email_time = datetime.datetime.strptime(clean_date, '%d %b %Y %H:%M:%S %z')
                 
-                time_diff = now - email_time[cite: 19]
-                minutes_unanswered = time_diff.total_seconds() / 60[cite: 19]
+                time_diff = now - email_time
+                minutes_unanswered = time_diff.total_seconds() / 60
                 
-                # Condition D: Trigger alert only around the 30-minute overdue mark
+                # Triggers only around the 30-minute overdue window (30-45 mins)
                 if 30 <= minutes_unanswered <= 45:
                     send_slack_block_message(
                         slack_client, 
@@ -139,4 +139,4 @@ def check_unanswered_emails():
                 print(f"Skipping date parse on thread {thread_id}: {e}")
 
 if __name__ == '__main__':
-    check_unanswered_emails()[cite: 19]
+    check_unanswered_emails()
