@@ -70,7 +70,8 @@ def check_unanswered_emails():
     gmail_service = get_gmail_service()
     slack_client = WebClient(token=slack_token)
     
-    query = "to:me is:unread"
+    # Restrict to emails from the last 2 days so old inbox items aren't scanned
+    query = "to:me is:unread newer_than:2d"
     results = gmail_service.users().messages().list(userId='me', q=query).execute()
     messages = results.get('messages', [])
     
@@ -107,7 +108,8 @@ def check_unanswered_emails():
                 time_diff = now - email_time
                 minutes_unanswered = time_diff.total_seconds() / 60
                 
-                if minutes_unanswered >= 30:
+                # Triggers strictly around the 30-minute threshold once
+                if 30 <= minutes_unanswered <= 45:
                     send_slack_block_message(slack_client, slack_channel, sender, subject, snippet, int(minutes_unanswered), thread_id)
             except Exception as e:
                 print(f"Skipping date parse on message {msg_id}: {e}")
