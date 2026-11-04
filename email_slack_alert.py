@@ -70,7 +70,7 @@ def check_unanswered_emails():
     gmail_service = get_gmail_service()
     slack_client = WebClient(token=slack_token)
     
-    # Get your own email address
+    # Get your authenticated email address
     user_profile = gmail_service.users().getProfile(userId='me').execute()
     my_email = user_profile.get('emailAddress', '').lower()
     
