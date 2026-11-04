@@ -1,6 +1,7 @@
 import os
 import datetime
 import json
+import email.utils
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -70,7 +71,7 @@ def check_unanswered_emails():
     gmail_service = get_gmail_service()
     slack_client = WebClient(token=slack_token)
     
-    # Get your authenticated email address
+    # Get your own email address
     user_profile = gmail_service.users().getProfile(userId='me').execute()
     my_email = user_profile.get('emailAddress', '').lower()
     
@@ -112,19 +113,20 @@ def check_unanswered_emails():
         if my_email and my_email not in to_header.lower():
             continue
 
-        # 3. Check overdue response time
+        # 3. Robust RFC 2822 email date parsing (handles GMT, UTC, numeric offsets, etc.)
         if date_str:
             try:
-                clean_date = date_str.split(' (')[0].strip()
-                try:
-                    email_time = datetime.datetime.strptime(clean_date, '%a, %d %b %Y %H:%M:%S %z')
-                except ValueError:
-                    email_time = datetime.datetime.strptime(clean_date, '%d %b %Y %H:%M:%S %z')
+                email_time = email.utils.parsedate_to_datetime(date_str)
+                # Convert to UTC for accurate comparison
+                if email_time.tzinfo is None:
+                    email_time = email_time.replace(tzinfo=datetime.timezone.utc)
+                else:
+                    email_time = email_time.astimezone(datetime.timezone.utc)
                 
                 time_diff = now - email_time
                 minutes_unanswered = time_diff.total_seconds() / 60
                 
-                # Triggers only around the 30-minute overdue window (30-45 mins)
+                # Triggers only around the 30-minute overdue window (30 to 45 mins)
                 if 30 <= minutes_unanswered <= 45:
                     send_slack_block_message(
                         slack_client, 
